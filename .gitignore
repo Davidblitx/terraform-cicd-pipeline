@@ -1,0 +1,15 @@
+# Terraform
+terraform/.terraform/
+terraform/*.tfvars
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+
+# Sensitive
+*.pem
+*.key
+.env
+
+# AWS CLI installer files
+aws/
+awscliv2.zip

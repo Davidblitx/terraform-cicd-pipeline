@@ -13,3 +13,9 @@ terraform/.terraform.lock.hcl
 # AWS CLI installer files
 aws/
 awscliv2.zip
+
+
+# Terraform state — never commit these
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info

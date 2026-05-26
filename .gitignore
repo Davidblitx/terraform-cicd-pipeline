@@ -19,3 +19,9 @@ awscliv2.zip
 *.tfstate
 *.tfstate.backup
 *.tfstate.lock.info
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/

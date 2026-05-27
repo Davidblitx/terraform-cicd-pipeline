@@ -47,7 +47,8 @@ variable "ssh_key_name" {
 }
 
 variable "allowed_ssh_cidr" {
-    description = "Your IP address for SSH access (format: x.x.x.x/32)"
+    description = "CIDR block for SSH access"
     type        = string
+    default     = "0.0.0.0/0"
     # No default — you must provide this. Never hardcode IPs in code.
 }

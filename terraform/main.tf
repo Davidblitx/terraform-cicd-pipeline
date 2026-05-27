@@ -366,3 +366,79 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   name = "${var.project_name}-ec2-profile"
   role = aws_iam_role.ec2_role.name
 }
+
+
+# ============================================================
+# ELASTIC IP
+# ============================================================
+
+# Allocate a static IP address
+resource "aws_eip" "web_server" {
+  domain = "vpc"
+
+  tags = {
+    Name = "${var.project_name}-eip"
+  }
+}
+
+# Attach it to your EC2 instance
+resource "aws_eip_association" "web_server" {
+  instance_id   = aws_instance.web_server.id
+  allocation_id = aws_eip.web_server.id
+}
+
+
+# ============================================================
+# IAM USER FOR GITHUB ACTIONS
+# ============================================================
+
+# Dedicated user for the CI/CD pipeline
+# Has only the permissions it needs — nothing more
+resource "aws_iam_user" "github_actions" {
+  name = "${var.project_name}-github-actions"
+
+  tags = {
+    Name    = "${var.project_name}-github-actions"
+    Purpose = "CI/CD pipeline access"
+  }
+}
+
+# What this user is allowed to do
+resource "aws_iam_user_policy" "github_actions_ecr" {
+  name = "${var.project_name}-github-actions-policy"
+  user = aws_iam_user.github_actions.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # ECR authentication
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        # ECR push permissions — only to YOUR repository
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:ListImages",
+          "ecr:DescribeImages"
+        ]
+        Resource = aws_ecr_repository.app.arn
+      }
+    ]
+  })
+}
+
+# Generate access keys for this user
+# The pipeline uses these to authenticate with AWS
+resource "aws_iam_access_key" "github_actions" {
+  user = aws_iam_user.github_actions.name
+}

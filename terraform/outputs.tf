@@ -27,3 +27,21 @@ output "ecr_repository_url" {
   description = "URL of the ECR repository for pushing Docker images"
   value       = aws_ecr_repository.app.repository_url
 }
+
+
+output "elastic_ip" {
+  description = "Static IP address that never changes"
+  value       = aws_eip.web_server.public_ip
+}
+
+
+output "github_actions_access_key_id" {
+  description = "AWS Access Key ID for GitHub Actions"
+  value       = aws_iam_access_key.github_actions.id
+}
+
+output "github_actions_secret_access_key" {
+  description = "AWS Secret Access Key for GitHub Actions"
+  value       = aws_iam_access_key.github_actions.secret
+  sensitive   = true
+}

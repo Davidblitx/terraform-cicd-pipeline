@@ -1,0 +1,215 @@
+# ============================================================
+# CI/CD Pipeline — terraform-cicd-pipeline
+# Triggers on every push to main branch
+# Stages: test → build → push → deploy → verify
+# ============================================================
+
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+
+# Environment variables available to all jobs
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPOSITORY: terraform-cicd-app
+  IMAGE_NAME: flask-app
+
+jobs:
+
+  # ── JOB 1: TEST ───────────────────────────────────────────
+  # Runs your unit tests
+  # If any test fails → pipeline stops here
+  # Nothing gets deployed
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        # Downloads your repository code onto the runner
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd app
+          pip install -r requirements.txt
+          pip install pytest==7.4.0
+
+      - name: Run tests
+        run: |
+          cd app
+          python3 -m pytest tests/ -v
+        # -v = verbose, shows each test name and result
+
+  # ── JOB 2: BUILD AND PUSH ─────────────────────────────────
+  # Only runs if test job passed
+  # Builds Docker image, pushes to ECR
+  build-and-push:
+    name: Build and Push to ECR
+    runs-on: ubuntu-latest
+    needs: test
+    # needs: test means this job waits for test to pass first
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+      # Passes the image tag to the deploy job
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+        # Injects your IAM credentials into the runner environment
+        # The runner can now talk to AWS
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        # Uses your AWS credentials to get a Docker login token
+        # Same as: aws ecr get-login-password | docker login ...
+
+      - name: Generate image tag
+        id: meta
+        run: |
+          # Tag with git commit hash — every deployment is traceable
+          # If something breaks, you know exactly which commit caused it
+          TAG="${{ github.sha }}"
+          SHORT_TAG="${TAG:0:7}"
+          echo "tag=${SHORT_TAG}" >> $GITHUB_OUTPUT
+          echo "Image will be tagged: ${SHORT_TAG}"
+
+      - name: Build Docker image
+        run: |
+          cd app
+          docker build -t ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }} .
+
+      - name: Push to ECR
+        run: |
+          ECR_URL="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
+
+          # Tag with commit hash (traceable)
+          docker tag \
+            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }} \
+            ${ECR_URL}:${{ steps.meta.outputs.tag }}
+
+          # Tag as latest (for convenience)
+          docker tag \
+            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }} \
+            ${ECR_URL}:latest
+
+          # Push both tags
+          docker push ${ECR_URL}:${{ steps.meta.outputs.tag }}
+          docker push ${ECR_URL}:latest
+
+          echo "Pushed: ${ECR_URL}:${{ steps.meta.outputs.tag }}"
+
+  # ── JOB 3: DEPLOY ─────────────────────────────────────────
+  # Only runs if build-and-push passed
+  # SSHes into EC2, pulls new image, restarts container
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    # needs: build-and-push means image must be in ECR first
+
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        # This action handles SSH for us
+        # Takes care of key setup, connection, and command execution
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            ECR_URL="024596526245.dkr.ecr.eu-west-1.amazonaws.com"
+            IMAGE="${ECR_URL}/terraform-cicd-app:latest"
+            CONTAINER="flask-app"
+
+            echo "=== Starting deployment ==="
+            echo "Image: ${IMAGE}"
+            echo "Time: $(date)"
+
+            # Authenticate with ECR using IAM role
+            aws ecr get-login-password --region eu-west-1 | \
+              docker login \
+              --username AWS \
+              --password-stdin \
+              ${ECR_URL}
+
+            # Pull the new image
+            echo "--- Pulling new image..."
+            docker pull ${IMAGE}
+
+            # Stop and remove old container
+            echo "--- Stopping old container..."
+            docker stop ${CONTAINER} 2>/dev/null || true
+            docker rm ${CONTAINER} 2>/dev/null || true
+
+            # Start new container
+            echo "--- Starting new container..."
+            docker run -d \
+              --name ${CONTAINER} \
+              --restart unless-stopped \
+              -p 5000:5000 \
+              ${IMAGE}
+
+            # Wait for container to start
+            sleep 5
+
+            # Verify health
+            echo "--- Verifying health..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost/health)
+
+            if [ "${HTTP_CODE}" = "200" ]; then
+              echo "=== Deployment successful ==="
+              echo "Health check: HTTP ${HTTP_CODE}"
+            else
+              echo "=== Deployment FAILED ==="
+              echo "Health check returned: HTTP ${HTTP_CODE}"
+              docker logs ${CONTAINER}
+              exit 1
+            fi
+
+  # ── JOB 4: NOTIFY ─────────────────────────────────────────
+  # Always runs — reports success or failure
+  notify:
+    name: Notify Result
+    runs-on: ubuntu-latest
+    needs: [test, build-and-push, deploy]
+    if: always()
+    # if: always() means this runs even if previous jobs failed
+
+    steps:
+      - name: Report status
+        run: |
+          if [ "${{ needs.deploy.result }}" = "success" ]; then
+            echo "✅ DEPLOYMENT SUCCESSFUL"
+            echo "Commit: ${{ github.sha }}"
+            echo "Author: ${{ github.actor }}"
+            echo "Time:   $(date)"
+          else
+            echo "❌ DEPLOYMENT FAILED"
+            echo "Test result:  ${{ needs.test.result }}"
+            echo "Build result: ${{ needs.build-and-push.result }}"
+            echo "Deploy result: ${{ needs.deploy.result }}"
+            echo "Check the logs above for details"
+          fi

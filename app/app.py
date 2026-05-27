@@ -11,7 +11,7 @@ START_TIME = datetime.datetime.utcnow()
 def home():
     return jsonify({
         "status": "running",
-        "message": "Production server is live",
+        "message": "Production server is live — deployed by CI/CD pipeline",
         "timestamp": str(datetime.datetime.utcnow()),
         "hostname": socket.gethostname(),
         "uptime_since": str(START_TIME)

@@ -7,6 +7,10 @@
 
 ---
 
+# System Architecture
+
+![Architecture Diagram](images/architecture-diagram.png)
+
 ## System Overview
 
 A production AWS infrastructure provisioned entirely with Terraform,

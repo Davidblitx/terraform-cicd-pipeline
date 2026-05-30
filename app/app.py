@@ -10,7 +10,7 @@ START_TIME = datetime.datetime.utcnow()
 @app.route('/')
 def home():
     return jsonify({
-        "status": "broken",
+        "status": "running",
         "message": "Production server is live — deployed by CI/CD pipeline",
         "timestamp": str(datetime.datetime.utcnow()),
         "hostname": socket.gethostname(),

@@ -1,123 +1,256 @@
-# Terraform + CI/CD Pipeline on AWS
+# Production-Grade AWS Infrastructure with Terraform & CI/CD
 
-Production AWS infrastructure built entirely with Terraform IaC,
-with a GitHub Actions pipeline that automatically tests, builds,
-and deploys a containerized Flask app on every push to main.
+A fully automated cloud infrastructure platform built on AWS using **Terraform Infrastructure as Code (IaC)** and **GitHub Actions CI/CD**. This project provisions and manages production-ready infrastructure, builds and tests a containerized Flask application, and deploys updates automatically with every push to the main branch.
 
-**Push code → pipeline runs → app is live. Zero manual steps.**
+**Key Result:** Developers only need to push code. Infrastructure, testing, image delivery, and deployment are handled automatically.
 
 ---
 
-## Live Demo
+## Architecture Diagram
 
-Application running at: `http://34.252.2.5`
+![Terraform CI/CD Architecture](docs/images/architecture-diagram.png)
 
-Pipeline history: [GitHub Actions](../../actions)
+## Overview
 
----
+This project demonstrates modern DevOps practices by combining:
 
-## How It Works
-git push main
-↓
-GitHub Actions (automatic):
-├── Run 11 unit tests        (stops if any fail)
-├── Build Docker image
-├── Push to AWS ECR
-├── SSH into EC2
-├── Deploy new container
-└── Verify health check
-↓
-Live in ~75 seconds
+* Infrastructure as Code (Terraform)
+* Containerization (Docker)
+* Continuous Integration & Continuous Deployment (GitHub Actions)
+* AWS Cloud Infrastructure
+* Security Hardening
+* Automated Testing
+* Production Web Hosting
+
+The entire environment is reproducible, version-controlled, and deployable from scratch without manual AWS Console configuration.
 
 ---
 
-## Stack
+## Live Environment
 
-| Layer | Technology |
-|-------|-----------|
-| Infrastructure | Terraform + AWS |
-| Compute | EC2 t3.micro (Ubuntu 22.04) |
-| Networking | Custom VPC, Subnet, IGW, Elastic IP |
-| Security | UFW, Fail2Ban, SSH hardening, IAM roles |
-| Container | Docker + Gunicorn |
-| Web Server | Nginx (reverse proxy) |
-| Registry | AWS ECR (private) |
-| CI/CD | GitHub Actions |
-| App | Python Flask |
-| State | Terraform remote state on S3 |
+**Application URL:** http://34.252.2.5
+
+The deployment pipeline automatically publishes application updates whenever changes are merged into the main branch.
 
 ---
 
-## Project Structure
-terraform-cicd-pipeline/
-├── terraform/
-│   ├── providers.tf    # AWS provider + region
-│   ├── backend.tf      # Remote state in S3
-│   ├── variables.tf    # All configurable values
-│   ├── main.tf         # VPC, EC2, ECR, IAM, Elastic IP
-│   └── outputs.tf      # Server IP, ECR URL, etc.
-├── app/
-│   ├── app.py          # Flask application (3 routes)
-│   ├── Dockerfile      # Non-root, production-grade
-│   ├── requirements.txt
-│   └── tests/
-│       └── test_app.py # 11 unit tests
-├── .github/
-│   └── workflows/
-│       └── deploy.yml  # Full CI/CD pipeline
-└── docs/
-└── ARCHITECTURE.md # Full technical documentation
+## Architecture
 
----
-
-## Infrastructure
-
-All AWS resources provisioned by Terraform — nothing clicked
-in the console.
-
-```bash
-cd terraform
-terraform init
-terraform plan   # preview changes
-terraform apply  # build infrastructure
+```text
+Developer
+    │
+    ▼
+GitHub Repository
+    │
+    ▼
+GitHub Actions Pipeline
+    │
+    ├── Execute Unit Tests
+    ├── Build Docker Image
+    ├── Push Image to AWS ECR
+    └── Deploy to EC2
+            │
+            ▼
+      Docker Container
+            │
+            ▼
+          Gunicorn
+            │
+            ▼
+           Nginx
+            │
+            ▼
+        End Users
 ```
 
 ---
 
-## Security Implementation
+## Technology Stack
 
-- SSH key-only authentication (passwords disabled)
-- Non-root user inside Docker container
-- IAM role for EC2→ECR (no credentials on server)
-- IAM user with least privilege for pipeline
-- Dual-layer firewall (Security Group + UFW)
-- Fail2Ban SSH brute force protection
-- Nginx security headers + rate limiting
-- All secrets in GitHub Secrets (never in code)
-
----
-
-## CI/CD Pipeline
-
-Every push to `main` triggers automatically:
-test → build → push to ECR → deploy → health check
-
-Failed tests = nothing deploys. Every deployment tagged
-with git commit hash for full traceability.
+| Category                | Technology                                       |
+| ----------------------- | ------------------------------------------------ |
+| Infrastructure as Code  | Terraform                                        |
+| Cloud Platform          | AWS                                              |
+| Compute                 | EC2 (Ubuntu 22.04)                               |
+| Networking              | VPC, Public Subnet, Internet Gateway, Elastic IP |
+| Containerization        | Docker                                           |
+| Application Server      | Gunicorn                                         |
+| Reverse Proxy           | Nginx                                            |
+| Container Registry      | Amazon ECR                                       |
+| CI/CD                   | GitHub Actions                                   |
+| Backend Application     | Python Flask                                     |
+| Remote State Management | Amazon S3                                        |
+| Security                | IAM, UFW, Fail2Ban, SSH Hardening                |
 
 ---
 
-## Key Engineering Decisions
+## Automated Deployment Workflow
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full
-explanation of every decision made in this project.
+Every push to the `main` branch triggers a complete deployment pipeline:
+
+1. Execute automated unit tests
+2. Build Docker image
+3. Tag image using Git commit SHA
+4. Push image to Amazon ECR
+5. Connect securely to EC2 via SSH
+6. Pull latest image
+7. Replace running container
+8. Run deployment health checks
+9. Serve updated application
+
+### Deployment Guarantees
+
+* Failed tests stop deployment immediately
+* Every deployment is traceable through commit hashes
+* Immutable Docker image releases
+* Consistent deployments across environments
+* No manual server access required
+
+Average deployment time: **~75 seconds**
 
 ---
 
-## What's Next
+## Infrastructure Provisioning
 
-- [ ] HTTPS with Let's Encrypt
-- [ ] Automatic rollback on failed health check
-- [ ] Terraform modules
-- [ ] Multi-environment pipeline (staging → prod)
-- [ ] Monitoring with Prometheus + Grafana
+All AWS resources are provisioned and managed through Terraform.
+
+### Provisioned Resources
+
+* Virtual Private Cloud (VPC)
+* Public Subnet
+* Internet Gateway
+* Route Tables
+* Elastic IP
+* EC2 Instance
+* Amazon ECR Repository
+* IAM Roles and Policies
+* Security Groups
+* S3 Remote State Backend
+
+Infrastructure changes are version-controlled and reviewed through Terraform plans before deployment.
+
+```bash
+cd terraform
+
+terraform init
+terraform plan
+terraform apply
+```
+
+---
+
+## Security Architecture
+
+Security was treated as a first-class requirement throughout the project.
+
+### Server Security
+
+* SSH key-based authentication only
+* Password authentication disabled
+* UFW host firewall configuration
+* Fail2Ban protection against brute-force attacks
+* Principle of least privilege applied to IAM permissions
+
+### Container Security
+
+* Non-root Docker container execution
+* Minimal application runtime environment
+* Private image registry via Amazon ECR
+
+### Deployment Security
+
+* Secrets stored in GitHub Secrets
+* No credentials stored on the server
+* EC2 authenticates to ECR using IAM roles
+* Secure deployment through encrypted SSH connections
+
+### Web Layer Security
+
+* Nginx reverse proxy
+* Security headers
+* Basic rate limiting
+* Application isolation through containers
+
+---
+
+## Project Structure
+
+```text
+terraform-cicd-pipeline/
+│
+├── terraform/
+│   ├── backend.tf
+│   ├── providers.tf
+│   ├── variables.tf
+│   ├── main.tf
+│   └── outputs.tf
+│
+├── app/
+│   ├── app.py
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── tests/
+│       └── test_app.py
+│
+├── .github/
+│   └── workflows/
+│       └── deploy.yml
+│
+└── docs/
+    └── ARCHITECTURE.md
+```
+
+---
+
+## Engineering Highlights
+
+### Infrastructure as Code
+
+Provisioned cloud resources entirely through Terraform, enabling repeatable and auditable deployments.
+
+### Continuous Delivery
+
+Implemented a fully automated CI/CD pipeline that validates, builds, and deploys application updates without manual intervention.
+
+### Cloud-Native Deployment
+
+Used Docker, ECR, and EC2 to create a production deployment workflow similar to those used in modern engineering teams.
+
+### Security Hardening
+
+Applied multiple security layers across infrastructure, operating system, application, and deployment processes.
+
+### Operational Reliability
+
+Integrated automated health checks and deployment verification to ensure application availability after releases.
+
+---
+
+## Future Enhancements
+
+* HTTPS with Let's Encrypt
+* Automated rollback strategy
+* Terraform module refactoring
+* Multi-environment deployments (Development, Staging, Production)
+* Prometheus monitoring
+* Grafana dashboards
+* Centralized log aggregation
+* Blue/Green deployment strategy
+
+---
+
+## Skills Demonstrated
+
+* AWS Cloud Infrastructure
+* Terraform
+* Infrastructure as Code (IaC)
+* CI/CD Pipelines
+* GitHub Actions
+* Docker
+* Linux Administration
+* Nginx
+* Python Flask
+* IAM & Cloud Security
+* Automated Testing
+* DevOps Engineering
+* Production Deployment Practices
